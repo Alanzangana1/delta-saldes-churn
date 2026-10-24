@@ -114,3 +114,6 @@ jobs:
 
       # Kvalitetsgrinden: felkod 1 om ROC AUC är under tröskeln (MIN_ROC_AUC, standard 0.70).
       - run: python -m churn.evaluate
+        # Tillfälligt: högre tröskel för att visa att en sämre modell stoppas (ärende 5).
+        env:
+          MIN_ROC_AUC: "0.80"
