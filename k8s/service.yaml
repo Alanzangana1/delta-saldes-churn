@@ -1,0 +1,11 @@
+# Ger podarna ett fast namn i klustret. Trafiken på port 80 går till 8000 i containern.
+apiVersion: v1
+kind: Service
+metadata:
+  name: churn
+spec:
+  selector:
+    app: churn
+  ports:
+    - port: 80
+      targetPort: 8000
