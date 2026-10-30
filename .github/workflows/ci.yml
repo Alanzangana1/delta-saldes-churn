@@ -196,8 +196,8 @@ jobs:
   deploy:
     # Rullar ut imagen som docker-jobbet nyss byggde till mitt namespace i kursens kluster.
     needs: docker
-    # Bara från main, aldrig från en pull request eller en annan gren.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Bara från main, aldrig från en pull request eller en annan gren. Samma regel som i docker.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # Miljön produktion kräver att jag godkänner innan jobbet startar.
     # Kubeconfig ligger som secret i miljön, så bara det här jobbet kan läsa den.
