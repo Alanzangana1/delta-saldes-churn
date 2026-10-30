@@ -125,7 +125,8 @@ jobs:
       packages: write
     env:
       # Taggen är commitens SHA, så imagen går att spåra till koden och modellen.
-      IMAGE: ghcr.io/hencyber/delta-saldes-churn:${{ github.sha }}
+      # Min egen registry, eftersom forken inte får pusha till teamets.
+      IMAGE: ghcr.io/alanzangana1/delta-saldes-churn:${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
 
@@ -191,3 +192,43 @@ jobs:
           push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
           tags: ${{ env.IMAGE }}
           cache-from: type=gha
+
+  deploy:
+    # Rullar ut imagen som docker-jobbet nyss byggde till mitt namespace i kursens kluster.
+    needs: docker
+    # Bara från main, aldrig från en pull request eller en annan gren.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    # Miljön produktion kräver att jag godkänner innan jobbet startar.
+    # Kubeconfig ligger som secret i miljön, så bara det här jobbet kan läsa den.
+    environment:
+      name: produktion
+      url: https://alan-zangana.89-167-53-206.sslip.io/health
+    env:
+      IMAGE: ghcr.io/alanzangana1/delta-saldes-churn:${{ github.sha }}
+      SHA: ${{ github.sha }}
+    steps:
+      - name: Koppla upp mot klustret
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+        run: |
+          echo "$KUBECONFIG_DATA" > "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      # Blir bytet inte klart inom tiden rullas det tillbaka och jobbet blir rött.
+      - name: Rulla ut
+        run: |
+          kubectl set image deployment/churn api="$IMAGE"
+          kubectl annotate deployment/churn kubernetes.io/change-cause="commit $SHA" --overwrite
+          kubectl rollout status deployment/churn --timeout=180s || { kubectl rollout undo deployment/churn; exit 1; }
+
+      # Kontrollerar att tjänsten svarar med rätt commit, inte bara att podden kör.
+      - name: Kontrollera /health
+        run: |
+          for i in $(seq 1 10); do
+            curl -sk https://alan-zangana.89-167-53-206.sslip.io/health | grep -q "$SHA" && exit 0
+            sleep 3
+          done
+          echo "Tjänsten svarar inte med $SHA, rullar tillbaka"
+          kubectl rollout undo deployment/churn
+          exit 1
