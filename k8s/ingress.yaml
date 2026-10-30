@@ -1,0 +1,25 @@
+# Vägen in utifrån i kursens kluster. NodePort och LoadBalancer är spärrade där,
+# så trafiken går via Traefik. I kind används port-forward i stället.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: churn
+  annotations:
+    # staging först för att testa, byts till letsencrypt när allt fungerar
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [alan-zangana.89-167-53-206.sslip.io]
+      secretName: churn-tls
+  rules:
+    - host: alan-zangana.89-167-53-206.sslip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: churn
+                port:
+                  number: 80

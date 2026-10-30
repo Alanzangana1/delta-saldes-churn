@@ -1,0 +1,53 @@
+# Churn-tjänsten. Imagen är den som teamets pipeline byggde på main,
+# taggad med commitens SHA så att man vet exakt vilken kod och modell som körs.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: churn
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # En ny pod startas innan en gammal tas bort, så att det alltid finns två som svarar.
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: churn
+  template:
+    metadata:
+      labels:
+        app: churn
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        # Användaren app i Dockerfilen
+        runAsUser: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: api
+          image: ghcr.io/hencyber/delta-saldes-churn:f50f5f195de11c9b5b01cf7a84dde84c4cfc1293
+          ports:
+            - containerPort: 8000
+          # Tjänsten använder ca 123Mi i vila. 128Mi per pod gör att två pods plus en
+          # extra under uppdateringen ryms i kvoten på 384Mi.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+          # Ingen trafik till podden förrän modellen är inläst och /health svarar.
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 5
+          # Startar om podden om /health slutar svara.
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
